@@ -78,8 +78,19 @@ Safeguards:
 - Prompt caching on the system prompt, tools, and growing conversation history.
 - A model allow-list (`ALLOWED_MODELS`) prevents accidentally running an expensive model.
 
-First measured run on `psf/requests`: 19 tool calls, ~89k input tokens, **$0.105**. That
-run led to the budget, conversation caching, and class-outline changes above.
+Measured on `psf/requests`:
+
+| Run | Tool calls | Turns | Input tokens | Cost |
+|-----|-----------|-------|--------------|------|
+| First version | 19 | 9 | 89,366 | $0.105 |
+| After budget, caching and class-outline changes | 12 | 5 | 16,194 | **$0.028** |
+
+At ~$0.03 per repo, reports for all 30 repositories cost under $1.
+
+Reviewing the agent's reports like any other output also improved the prompt: an early report
+misstated how test reachability works, and a later one cited low similarity scores as
+duplication and suggested changes to code it had not read. Each became an explicit rule in
+the system prompt.
 
 ---
 

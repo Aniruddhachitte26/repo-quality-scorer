@@ -1,31 +1,48 @@
 # Remediation report: psf/requests
 
-Score **89.5 / 100 (grade B)** | commit `611c6162cb` | 2026-10-01 06:18 UTC | model `claude-haiku-4-5-20251001`
+Score **89.5 / 100 (grade B)** | commit `611c6162cb` | 2026-10-01 07:24 UTC | model `claude-haiku-4-5-20251001`
 
 ## Summary
-
-The requests repository scores 89.5/100 (Grade B), with solid performance in dependencies and documentation but trailing in architecture and duplication. The biggest quality drains are high cyclomatic complexity (5.2% of functions exceed threshold), four god classes with 15–25 methods each, 2.1% duplicated lines, and 17.5% of public functions unreachable from tests. Addressing the top 3–4 complexity hotspots and improving test coverage of critical utility functions will yield the highest impact.
+The requests library scores 89.5/100 (grade B), with solid documentation and dependencies but structural issues in code complexity and test coverage. The main pain points are high cyclomatic complexity in core request-handling functions, four god classes with excessive responsibilities, and 2.1% code duplication affecting maintainability.
 
 ## Top priorities
 
-1. **Refactor `HTTPDigestAuth.build_digest_header` (src/requests/auth.py:157)** — Complexity 19, 110 LOC. This method contains 4 nearly-identical hash function definitions (lines 176–205) that could be consolidated into a single hash factory function. Extract the hash algorithm selection into a helper that returns the appropriate hash function, eliminating the repetitive `if/elif` blocks. This will reduce complexity by ~5–6 points and improve maintainability. *Effort: Small*
+1. **Refactor RequestEncodingMixin._encode_files (complexity 21)** — src/requests/models.py:183
+   - **Evidence**: Highest complexity function (21, threshold is 10), 69 lines handling multipart file encoding with nested loops and multiple conditional branches.
+   - **Why it matters**: Complex encoding logic is error-prone and difficult to maintain. This function handles critical request preparation.
+   - **Fix**: Extract the file tuple unpacking logic (lines 221-243) into a helper function `_extract_file_data()`, and the field iteration logic (lines 203-219) into `_encode_fields()`. This breaks the single responsibility and reduces nesting.
+   - **Effort**: Medium
 
-2. **Extract timeout parsing logic from `HTTPAdapter.send` (src/requests/adapters.py:634)** — Complexity 20, 115 LOC. Lines 681–693 contain a self-contained timeout tuple parsing block that is separate from the core HTTP logic. Extract this into a private method `_resolve_timeout(timeout)` to reduce send's complexity and improve reusability. The exception handling hierarchy (lines 695–746) can also be simplified by consolidating similar error mappings. *Effort: Medium*
+2. **Simplify HTTPAdapter.send error handling (complexity 20)** — src/requests/adapters.py:634
+   - **Evidence**: Second-highest complexity (20, threshold 10), 115 lines with 7 nested exception handlers (lines 695-746) for urllib3 errors.
+   - **Why it matters**: Exception translation is critical for error propagation; nested handlers are hard to trace and modify.
+   - **Fix**: Extract the exception handling block into a private method `_handle_urllib3_errors(e, request)` that consolidates the error type checking and re-raising logic. This reduces the send() method to ~50 lines.
+   - **Effort**: Medium
 
-3. **Simplify `RequestEncodingMixin._encode_files` (src/requests/models.py:183)** — Complexity 21, 69 LOC (worst complexity in codebase). Lines 221–234 handle file tuple unpacking with repetitive variable assignments (`fn`, `fp`, `ft`, `fh`). Extract file tuple parsing into a helper function `_parse_file_tuple(v, k)` to return `(fn, fp, ft, fh)` cleanly. Additionally, consolidate the data conversion logic (lines 236–243) into a helper like `_read_file_data(fp)` to separate concerns. *Effort: Medium*
+3. **Reduce RequestsCookieJar god class (25 methods, 286 lines)** — src/requests/cookies.py:191
+   - **Evidence**: Exceeds god class threshold (≥20 methods), mixing cookie jar manipulation, domain/path queries, and state serialization.
+   - **Why it matters**: God classes are harder to test, maintain, and extend. This mixes multiple concerns.
+   - **Fix**: Extract domain/path listing methods (`list_domains`, `list_paths`) and find operations (`_find`, `_find_no_duplicates`) into a separate `CookieQuery` helper class. Extract state management (`__getstate__`, `__setstate__`) into a mixin.
+   - **Effort**: Large
 
-4. **Add test coverage for `HTTPAdapter.get_connection` (src/requests/adapters.py:512)** — 42 LOC, currently unreachable. This critical method is untested despite being used during request sending. Add integration tests that exercise TLS context handling with various proxy/cert configurations. Also add tests for `get_unicode_from_response` (src/requests/utils.py:633, 39 LOC) which handles charset detection. *Effort: Medium*
+4. **Address test coverage gap** — src/requests/adapters.py:512, src/requests/utils.py:633, src/requests/__init__.py:60
+   - **Evidence**: 82.5% reachability (target 90%), with HTTPAdapter.get_connection (42 lines), get_unicode_from_response (39 lines), and check_compatibility (37 lines) untested.
+   - **Why it matters**: Untested public APIs hide latent bugs and don't guarantee correctness of edge cases.
+   - **Fix**: Add test cases for `HTTPAdapter.get_connection` covering connection pool reuse scenarios, `get_unicode_from_response` with various response encodings, and `check_compatibility` with edge-case version strings.
+   - **Effort**: Medium
 
-5. **Consolidate `super_len` (src/requests/utils.py:160)** — Complexity 16, 69 LOC. The nested try/except blocks (lines 176–184, 201–223) have redundant logic for file length detection. Extract file-specific length detection into a helper `_get_file_length(o)` to improve readability and reduce nesting depth from 4 to 2 levels. *Effort: Small*
+5. **Eliminate code duplication (94 redundant lines, 2.1%)** — src/requests/models.py
+   - **Evidence**: RequestEncodingMixin._encode_files (similarity 0.658 with PreparedRequest.prepare_body) shares file/data iteration patterns; _encode_params (0.539 similarity) duplicates parameter encoding logic.
+   - **Why it matters**: Duplication means bug fixes and enhancements must be applied in multiple places.
+   - **Fix**: Extract shared type-checking and encoding patterns (bytes vs. string handling) into utility functions like `_encode_value(val)` and `_normalize_key(key)` in utils.py, reused by both methods.
+   - **Effort**: Small
 
 ## Quick wins
 
-- **Unify hash function helpers in `HTTPDigestAuth.build_digest_header`** (lines 174–205): Replace the four identical-structure hash function defs with a single factory `_get_hash_func(algorithm)` that returns the appropriate callable. Reduces lines by ~20 and cuts complexity by ~4.
-
-- **Extract file tuple unpacking in `_encode_files`** (lines 221–234): Create a named function `_parse_file_tuple(v, k)` to return a 4-tuple `(filename, fileobj, content_type, headers)`. Improves readability without changing logic.
-
-- **Add docstring tests or unit tests for `parse_list_header` and `from_key_val_list`** (src/requests/utils.py): These are header/list parsing utilities (29 and 27 LOC respectively) that appear untested. A few parametrized pytest cases per function would close coverage gaps with minimal effort.
+- **Extract timeout resolution logic from HTTPAdapter.send** (lines 681-693): Move the 3-way timeout parsing into a helper `_resolve_timeout(timeout)` function. Reduces send() complexity by 1-2 points with zero functional risk.
+- **Add docstrings to HTTPAdapter exception translation**: Document which urllib3 exceptions map to which requests exceptions in HTTPAdapter.send. Improves maintainability without code changes.
+- **Add @lru_cache to repeated utility calls**: Functions like `unicode_is_ascii()` and `to_native_string()` called in hot paths (prepare_url) could benefit from caching, improving performance with minimal code change.
 
 ## Caveats
 
-Test reachability is static—functions invoked indirectly via callbacks, property decorators, or framework mechanisms (e.g., urllib3 connection pooling) may be marked unreachable even if exercised at runtime. The 17.5% untested gap likely includes some framework-driven code. Cyclomatic complexity counts decision branches; extracting helper functions reduces CC but does not reduce logical complexity, so refactoring must also consolidate control flow logic, not just move code.
+Test reachability is determined statically by name mention, not execution. Indirect framework invocation (e.g., WSGI adapters, callback hooks) may be missed, understating actual coverage. Complexity scores reflect McCabe cycles in the AST; they don't account for cognitive load from nested data structures or implicit dependencies, which may make some functions harder than the score suggests.
