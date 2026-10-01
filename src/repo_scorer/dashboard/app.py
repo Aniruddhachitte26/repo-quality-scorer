@@ -55,6 +55,9 @@ def page_leaderboard(rows: list[dict]) -> None:
     statuses = sorted({r["maintenance"] for r in rows})
     chosen = st.multiselect("Maintenance status", statuses, default=statuses)
     shown = [r for r in rows if r["maintenance"] in chosen]
+    if not shown:
+        st.info("No repositories match this filter. Select at least one maintenance status.")
+        return
 
     df = pd.DataFrame(shown)[
         ["rank", "repo", "score", "grade", "beats_pct", *CATEGORIES,

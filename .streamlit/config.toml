@@ -1,0 +1,9 @@
+# Streamlit settings for this project (read when running from the repo root).
+
+[server]
+# Only this computer can open the dashboard, not other devices on the network.
+address = "localhost"
+headless = true
+
+[browser]
+gatherUsageStats = false
