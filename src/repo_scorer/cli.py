@@ -319,6 +319,23 @@ def refresh_metadata():
 
 
 @app.command()
+def dashboard():
+    """Open the read-only Streamlit dashboard in your browser."""
+    import subprocess
+    import sys
+
+    try:
+        import streamlit  # noqa: F401
+    except ImportError:
+        typer.secho('Streamlit not installed. Run: pip install -e ".[dashboard]"',
+                    fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    app_path = Path(__file__).parent / "dashboard" / "app.py"
+    subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
+
+
+@app.command()
 def reanalyze():
     """Re-run analyzers + scoring for every ingested repo (no GitHub calls, no Claude).
 

@@ -1,0 +1,214 @@
+"""Streamlit dashboard. Read-only: it never calls GitHub, PyPI or Claude.
+
+Run with:  repo-scorer dashboard
+"""
+
+import pandas as pd
+import streamlit as st
+
+from repo_scorer.dashboard.data import CATEGORIES, load_leaderboard, load_repo_detail
+from repo_scorer.db.session import SessionLocal
+from repo_scorer.scoring.scorecard import SCORECARD, biggest_losses
+
+st.set_page_config(page_title="Repo Quality Scorer", page_icon="🔎", layout="wide")
+
+STATUS_COLOR = {
+    "active": "green", "slowing": "orange", "inactive": "red",
+    "archived": "gray", "unknown": "gray",
+}
+
+
+@st.cache_data(ttl=60)
+def get_leaderboard() -> list[dict]:
+    with SessionLocal() as session:
+        return load_leaderboard(session)
+
+
+@st.cache_data(ttl=60)
+def get_detail(repo_id: int) -> dict | None:
+    with SessionLocal() as session:
+        return load_repo_detail(session, repo_id)
+
+
+def badge(status: str, label: str) -> str:
+    return f":{STATUS_COLOR.get(status, 'gray')}[{label}]"
+
+
+# ---------------------------------------------------------------- pages
+
+
+def page_leaderboard(rows: list[dict]) -> None:
+    st.title("Repository leaderboard")
+    st.caption(
+        "Scores come from deterministic static analysis. Maintenance status is shown "
+        "separately and does not affect the score."
+    )
+
+    scores = [r["score"] for r in rows]
+    active = sum(r["maintenance"] == "active" for r in rows)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Repositories", len(rows))
+    c2.metric("Median score", f"{pd.Series(scores).median():.1f}")
+    c3.metric("Score range", f"{min(scores):.0f}-{max(scores):.0f}")
+    c4.metric("Actively maintained", f"{active} / {len(rows)}")
+
+    statuses = sorted({r["maintenance"] for r in rows})
+    chosen = st.multiselect("Maintenance status", statuses, default=statuses)
+    shown = [r for r in rows if r["maintenance"] in chosen]
+
+    df = pd.DataFrame(shown)[
+        ["rank", "repo", "score", "grade", "beats_pct", *CATEGORIES,
+         "maintenance", "stars", "has_report", "url"]
+    ]
+    progress = {
+        c: st.column_config.ProgressColumn(c.capitalize(), min_value=0, max_value=100, format="%.0f")
+        for c in CATEGORIES
+    }
+    st.dataframe(
+        df,
+        hide_index=True,
+        column_config={
+            "rank": st.column_config.NumberColumn("#", width="small"),
+            "repo": "Repository",
+            "score": st.column_config.ProgressColumn(
+                "Score", min_value=0, max_value=100, format="%.1f"
+            ),
+            "grade": "Grade",
+            "beats_pct": st.column_config.NumberColumn(
+                "Beats", format="%.0f%%", help="% of the other repos this one outscores"
+            ),
+            **progress,
+            "maintenance": "Maintenance",
+            "stars": st.column_config.NumberColumn("Stars", format="%d"),
+            "has_report": st.column_config.CheckboxColumn("Claude report"),
+            "url": st.column_config.LinkColumn("GitHub", display_text="open"),
+        },
+    )
+
+
+def page_detail(rows: list[dict]) -> None:
+    names = {r["repo"]: r["id"] for r in rows}
+    choice = st.selectbox("Repository", list(names))
+    detail = get_detail(names[choice])
+    if detail is None or detail["result"] is None:
+        st.warning("No score for this repository yet.")
+        return
+
+    repo, result = detail["repo"], detail["result"]
+    row = next(r for r in rows if r["repo"] == choice)
+
+    st.title(repo["name"])
+    if repo["description"]:
+        st.caption(repo["description"])
+    st.markdown(
+        f"Maintenance: {badge(detail['maintenance'], detail['maintenance_label'])}  ·  "
+        f"license {repo['license'] or 'unknown'}  ·  commit `{(repo['commit_sha'] or '')[:10]}`  ·  "
+        f"[GitHub]({repo['url']})"
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Overall score", f"{result['overall']} / 100")
+    c2.metric("Grade", result["grade"])
+    c3.metric("Rank", f"#{row['rank']} of {len(rows)}", help=f"Beats {row['beats_pct']:.0f}% of the others")
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Category scores")
+        cats = pd.DataFrame(
+            {"score": [result["categories"][c]["score"] for c in CATEGORIES]}, index=CATEGORIES
+        )
+        st.bar_chart(cats, horizontal=True)
+    with right:
+        st.subheader("Biggest point losses")
+        losses = biggest_losses(result, n=8)
+        if losses:
+            st.dataframe(
+                pd.DataFrame(losses)[["category", "label", "value", "best", "overall_points_lost"]],
+                hide_index=True,
+                column_config={
+                    "label": "Metric",
+                    "overall_points_lost": st.column_config.NumberColumn("Points lost", format="-%.2f"),
+                },
+            )
+        else:
+            st.success("No points lost anywhere.")
+
+    st.subheader("Claude remediation report")
+    if detail["report_markdown"]:
+        cost = detail["report_cost"]
+        st.caption(f"Generated by the agent{f' for ${cost:.4f}' if cost else ''}.")
+        with st.container(border=True):
+            st.markdown(detail["report_markdown"])
+    else:
+        st.info(
+            "No report yet. Generate one (uses API credits) with:\n\n"
+            f"`repo-scorer recommend {repo['url']}`"
+        )
+
+    st.subheader("Raw metrics")
+    for analyzer, metrics in sorted(detail["metrics"].items()):
+        with st.expander(analyzer):
+            st.dataframe(
+                pd.DataFrame(
+                    [{"metric": n, "value": v} for n, (v, _) in sorted(metrics.items())]
+                ),
+                hide_index=True,
+            )
+            for name, (_, details) in sorted(metrics.items()):
+                if details:
+                    st.caption(name)
+                    st.json(details, expanded=False)
+
+
+def page_methodology() -> None:
+    st.title("Methodology")
+    st.markdown(
+        """
+Each repository goes through the same deterministic pipeline:
+**ingest → AST parse → 5 analyzers → scoring**. An optional Claude agent then reads
+the stored results and source code to write remediation advice. It never changes a score.
+
+Every rule maps one metric onto 0-100 between a *worst* and a *best* value (linear in
+between, clamped outside). A category is the weighted average of its rules; the overall
+score is the weighted average of the categories. The tables below are generated from the
+scoring code itself, so they are always in sync with it.
+"""
+    )
+    for name, (weight, rules) in SCORECARD.items():
+        st.subheader(f"{name.capitalize()}: {int(weight * 100)}% of the overall score")
+        st.dataframe(
+            pd.DataFrame([
+                {"metric": r.label, "worst (scores 0)": r.worst,
+                 "best (scores 100)": r.best, "weight in category": f"{int(r.weight * 100)}%"}
+                for r in rules
+            ]),
+            hide_index=True,
+        )
+    st.subheader("Known limitations")
+    st.markdown(
+        """
+- **Python only.** Analysis uses Python's own `ast` module.
+- **Test reachability is static.** A function counts as reached if tests mention its name or a
+  reached function calls it by name. Name collisions can over-count; callbacks can be missed.
+- **Library code is detected structurally:** files inside packages (folders with `__init__.py`)
+  or top-level modules. Loose scripts elsewhere are excluded.
+- **Maintenance** uses GitHub's last push date, which any push (even a bot) updates.
+"""
+    )
+
+
+# ---------------------------------------------------------------- main
+
+rows = get_leaderboard()
+st.sidebar.title("🔎 Repo Quality Scorer")
+page = st.sidebar.radio("Page", ["Leaderboard", "Repository detail", "Methodology"])
+st.sidebar.caption("Read-only view of stored results. Refreshes every 60 seconds.")
+
+if not rows and page != "Methodology":
+    st.warning("No scored repositories yet. Run `repo-scorer batch repos.txt` first.")
+elif page == "Leaderboard":
+    page_leaderboard(rows)
+elif page == "Repository detail":
+    page_detail(rows)
+else:
+    page_methodology()

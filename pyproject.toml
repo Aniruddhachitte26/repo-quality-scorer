@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
 embeddings = ["fastembed"]
+dashboard = ["streamlit"]
 
 [project.scripts]
 repo-scorer = "repo_scorer.cli:app"
