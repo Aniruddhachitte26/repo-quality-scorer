@@ -24,7 +24,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from repo_scorer.analyzers.base import MetricResult, is_auxiliary_path, is_public
+from repo_scorer.analyzers.base import MetricResult, get_library_paths, is_public
 from repo_scorer.db.models import CodeUnit, Repo, SourceFile
 
 NAME = "tests"
@@ -158,7 +158,8 @@ def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
         )
     ).all()
     test_files = [f for f in files if f.is_test]
-    src_files = [f for f in files if not f.is_test and not is_auxiliary_path(f.path)]
+    library = get_library_paths(session, repo.id)
+    src_files = [f for f in files if not f.is_test and f.path in library]
 
     # --- what the tests mention, and how many checks they make
     test_ids: set[str] = set()

@@ -14,7 +14,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from repo_scorer.analyzers.base import MetricResult, is_auxiliary_path, is_public
+from repo_scorer.analyzers.base import MetricResult, get_library_paths, is_public
 from repo_scorer.db.models import CodeUnit, Repo, SourceFile
 
 NAME = "documentation"
@@ -87,7 +87,8 @@ def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
         .where(SourceFile.repo_id == repo.id, SourceFile.is_test.is_(False))
     ).all()
 
-    public = [r for r in rows if is_public(r.qualname) and not is_auxiliary_path(r.path)]
+    library = get_library_paths(session, repo.id)
+    public = [r for r in rows if is_public(r.qualname) and r.path in library]
     callables = [r for r in public if r.kind in ("function", "method")]
 
     documented = sum(r.has_docstring for r in public)

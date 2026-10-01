@@ -34,9 +34,10 @@ def db_check():
 def init_db():
     """Create all database tables (safe to run repeatedly)."""
     from repo_scorer.db.models import Base
-    from repo_scorer.db.session import engine
+    from repo_scorer.db.session import engine, migrate
 
     Base.metadata.create_all(engine)
+    migrate()
     typer.secho("Tables created: " + ", ".join(Base.metadata.tables), fg=typer.colors.GREEN)
 
 
@@ -186,6 +187,12 @@ def score(repo_url: str):
         f"\n{repo.owner}/{repo.name}: {result['overall']} / 100  (grade {result['grade']})",
         fg=typer.colors.GREEN, bold=True,
     )
+    from repo_scorer.maintenance import LABELS, maintenance_status
+
+    status = maintenance_status(repo.archived, repo.pushed_at)
+    color = typer.colors.GREEN if status == "active" else typer.colors.YELLOW
+    typer.secho(f"  Maintenance: {LABELS[status]}  (shown separately, not part of the score)",
+                fg=color)
     typer.echo()
     for name, cat in result["categories"].items():
         bar = "\u2588" * int(cat["score"] // 5)
@@ -283,6 +290,63 @@ def batch(
         + (f", total Claude cost ${total_cost:.4f}" if recommend else ""),
         bold=True,
     )
+
+
+@app.command()
+def refresh_metadata():
+    """Re-fetch GitHub metadata (stars, archived, last push) for every repo. No re-clone."""
+    from sqlalchemy import select
+
+    from repo_scorer.db.models import Repo
+    from repo_scorer.db.session import SessionLocal
+    from repo_scorer.ingest.github import RepoRef, fetch_metadata
+    from repo_scorer.ingest.service import apply_metadata
+    from repo_scorer.maintenance import maintenance_status
+
+    with SessionLocal() as session:
+        repos = session.scalars(select(Repo)).all()
+        for i, repo in enumerate(repos, 1):
+            try:
+                apply_metadata(repo, fetch_metadata(RepoRef(repo.owner, repo.name)))
+                session.commit()
+                status = maintenance_status(repo.archived, repo.pushed_at)
+                typer.echo(f"[{i}/{len(repos)}] {repo.owner}/{repo.name}: {status}")
+            except (ValueError, RuntimeError) as exc:
+                typer.secho(f"[{i}/{len(repos)}] {repo.owner}/{repo.name}: {exc}",
+                            fg=typer.colors.RED)
+                if "rate limit" in str(exc):
+                    break
+
+
+@app.command()
+def reanalyze():
+    """Re-run analyzers + scoring for every ingested repo (no GitHub calls, no Claude).
+
+    Use after changing analyzer or scoring rules.
+    """
+    from sqlalchemy import select
+
+    from repo_scorer.analyzers.runner import run_analyzers
+    from repo_scorer.db.models import Repo
+    from repo_scorer.db.session import SessionLocal
+    from repo_scorer.scoring.service import score_repo
+
+    with SessionLocal() as session:
+        repos = session.execute(select(Repo.id, Repo.owner, Repo.name)).all()
+
+    results = []
+    for i, (repo_id, owner, name) in enumerate(repos, 1):
+        typer.echo(f"[{i}/{len(repos)}] {owner}/{name}")
+        try:
+            run_analyzers(repo_id)
+            scored = score_repo(repo_id)
+            results.append((scored["overall"], scored["grade"], f"{owner}/{name}"))
+        except Exception as exc:
+            typer.secho(f"    FAILED: {type(exc).__name__}: {exc}", fg=typer.colors.RED)
+
+    typer.secho("\nLeaderboard", bold=True)
+    for rank, (overall, grade_, full) in enumerate(sorted(results, reverse=True), 1):
+        typer.echo(f"  {rank:>2}. {overall:>5}  {grade_}  {full}")
 
 
 if __name__ == "__main__":

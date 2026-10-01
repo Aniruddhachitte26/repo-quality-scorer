@@ -5,7 +5,18 @@ from sqlalchemy import func, select
 from repo_scorer.db.models import Repo
 from repo_scorer.db.session import SessionLocal
 from repo_scorer.ingest.clone import clone_repo
-from repo_scorer.ingest.github import fetch_metadata, parse_github_url
+from repo_scorer.ingest.github import RepoMetadata, fetch_metadata, parse_github_url
+
+
+def apply_metadata(repo: Repo, meta: RepoMetadata) -> None:
+    repo.description = meta.description
+    repo.default_branch = meta.default_branch
+    repo.stars = meta.stars
+    repo.forks = meta.forks
+    repo.open_issues = meta.open_issues
+    repo.license = meta.license
+    repo.archived = meta.archived
+    repo.pushed_at = meta.pushed_at
 
 
 def get_repo_by_url(url: str) -> Repo | None:
@@ -28,13 +39,7 @@ def ingest_repo(url: str, force: bool = False) -> Repo:
             repo = Repo(url=ref.url, owner=ref.owner, name=ref.name)
             session.add(repo)
 
-        repo.description = meta.description
-        repo.default_branch = meta.default_branch
-        repo.stars = meta.stars
-        repo.forks = meta.forks
-        repo.open_issues = meta.open_issues
-        repo.license = meta.license
-        repo.pushed_at = meta.pushed_at
+        apply_metadata(repo, meta)
         repo.commit_sha = sha
         repo.local_path = str(path.resolve())
 

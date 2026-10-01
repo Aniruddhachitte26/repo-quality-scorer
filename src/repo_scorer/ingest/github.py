@@ -36,6 +36,7 @@ class RepoMetadata:
     forks: int
     open_issues: int
     license: str | None
+    archived: bool
     pushed_at: datetime | None
 
 
@@ -77,5 +78,6 @@ def fetch_metadata(ref: RepoRef) -> RepoMetadata:
         forks=data.get("forks_count", 0),
         open_issues=data.get("open_issues_count", 0),
         license=(data.get("license") or {}).get("spdx_id"),
+        archived=bool(data.get("archived", False)),
         pushed_at=datetime.fromisoformat(pushed_at) if pushed_at else None,
     )

@@ -1,4 +1,4 @@
-from repo_scorer.analyzers.base import is_auxiliary_path, is_public
+from repo_scorer.analyzers.base import is_auxiliary_path, is_public, library_paths
 from repo_scorer.analyzers.documentation import ReadmeStats, analyze_readme, readme_score
 
 GOOD_README = """# MyLib
@@ -58,3 +58,35 @@ def test_is_auxiliary_path():
     assert is_auxiliary_path("setup.py")
     assert is_auxiliary_path("examples/demo.py")
     assert not is_auxiliary_path("src/requests/api.py")
+
+
+def test_library_paths_excludes_non_package_folders():
+    """Mirrors gruns/icecream: bug-repro scripts in a non-package folder."""
+    paths = [
+        "icecream/__init__.py",
+        "icecream/icecream.py",
+        "failures-to-investigate/freshsales.py",
+        "failures-to-investigate/freshsales2.py",
+        "setup.py",
+    ]
+    assert library_paths(paths) == {"icecream/__init__.py", "icecream/icecream.py"}
+
+
+def test_library_paths_src_layout_and_nested_packages():
+    paths = [
+        "src/pkg/__init__.py",
+        "src/pkg/core.py",
+        "src/pkg/sub/__init__.py",
+        "src/pkg/sub/deep.py",
+        "src/pkg/notes/scratch.py",   # notes/ has no __init__.py
+        "benchmarks/run.py",
+    ]
+    assert library_paths(paths) == {
+        "src/pkg/__init__.py", "src/pkg/core.py",
+        "src/pkg/sub/__init__.py", "src/pkg/sub/deep.py",
+    }
+
+
+def test_library_paths_single_module_repo_falls_back():
+    """Repos like kennethreitz/crayons are one top-level file, no packages."""
+    assert library_paths(["crayons.py", "setup.py", "docs/conf.py"]) == {"crayons.py"}

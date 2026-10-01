@@ -41,6 +41,7 @@ class Repo(Base):
     forks: Mapped[int | None]
     open_issues: Mapped[int | None]
     license: Mapped[str | None] = mapped_column(String(100))
+    archived: Mapped[bool | None]  # GitHub's archived (read-only) flag
     pushed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     commit_sha: Mapped[str | None] = mapped_column(String(40))
     local_path: Mapped[str | None] = mapped_column(String(1000))

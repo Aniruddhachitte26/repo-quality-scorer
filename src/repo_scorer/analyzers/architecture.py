@@ -20,7 +20,7 @@ import networkx as nx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from repo_scorer.analyzers.base import MetricResult, is_auxiliary_path
+from repo_scorer.analyzers.base import MetricResult, get_library_paths
 from repo_scorer.db.models import CodeUnit, Repo, SourceFile
 
 NAME = "architecture"
@@ -170,7 +170,8 @@ def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
             SourceFile.parse_error.is_(None),
         )
     ).all()
-    files = [f for f in files if not is_auxiliary_path(f.path)]
+    library = get_library_paths(session, repo.id)
+    files = [f for f in files if f.path in library]
 
     # --- import graph
     sources = {

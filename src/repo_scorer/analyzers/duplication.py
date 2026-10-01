@@ -22,7 +22,7 @@ from pathlib import Path
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
-from repo_scorer.analyzers.base import MetricResult, is_auxiliary_path
+from repo_scorer.analyzers.base import MetricResult, get_library_paths
 from repo_scorer.db.models import CodeUnit, CodeUnitEmbedding, EmbeddingCache, Repo, SourceFile
 
 NAME = "duplication"
@@ -169,7 +169,8 @@ def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
             CodeUnit.kind.in_(["function", "method"]),
         )
     ).all()
-    rows = [r for r in rows if not is_auxiliary_path(r.path)]
+    library = get_library_paths(session, repo.id)
+    rows = [r for r in rows if r.path in library]
     eligible = [r for r in rows if r.loc >= MIN_LINES]
 
     groups = find_clone_groups(eligible)
