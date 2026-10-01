@@ -164,8 +164,74 @@ def details(
 
 @app.command()
 def score(repo_url: str):
-    """Score a repository (not implemented yet)."""
-    typer.echo(f"Would score: {repo_url}")
+    """Compute category scores, overall score and grade from stored metrics."""
+    from repo_scorer.ingest.service import get_repo_by_url
+    from repo_scorer.scoring.scorecard import biggest_losses
+    from repo_scorer.scoring.service import score_repo
+
+    repo = get_repo_by_url(repo_url)
+    if repo is None:
+        typer.secho("Repo not ingested yet. Run: repo-scorer ingest <url>", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    try:
+        result = score_repo(repo.id)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(
+        f"\n{repo.owner}/{repo.name}: {result['overall']} / 100  (grade {result['grade']})",
+        fg=typer.colors.GREEN, bold=True,
+    )
+    typer.echo()
+    for name, cat in result["categories"].items():
+        bar = "\u2588" * int(cat["score"] // 5)
+        typer.echo(
+            f"  {name:<14} {cat['score']:>5}  {cat['grade']}  "
+            f"(weight {int(cat['weight'] * 100)}%)  {bar}"
+        )
+
+    losses = biggest_losses(result)
+    if losses:
+        typer.echo("\n  Biggest point losses:")
+        for p in losses:
+            typer.echo(
+                f"    -{p['overall_points_lost']:<5} {p['category']}.{p['label']} = {p['value']:g}"
+                f"  (best: {p['best']:g})"
+            )
+
+
+@app.command()
+def recommend(repo_url: str):
+    """Run the Claude agent to investigate the scores and write a remediation report."""
+    from repo_scorer.agent.service import generate_report
+    from repo_scorer.ingest.service import get_repo_by_url
+
+    repo = get_repo_by_url(repo_url)
+    if repo is None:
+        typer.secho("Repo not ingested yet. Run: repo-scorer ingest <url>", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    def show_call(name: str, args: dict) -> None:
+        arg_text = ", ".join(f"{k}={v}" for k, v in args.items())
+        typer.secho(f"  -> {name}({arg_text})", fg=typer.colors.CYAN)
+
+    typer.echo(f"Agent investigating {repo.owner}/{repo.name}...")
+    try:
+        path, report, usage, model = generate_report(repo.id, on_tool_call=show_call)
+    except (ValueError, RuntimeError) as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.echo("\n" + report)
+    cost = usage.cost(model)
+    typer.secho(
+        f"Saved to {path}  |  {len(usage.tool_calls)} tool calls, {usage.turns} turns, "
+        f"{usage.input_tokens + usage.cache_read_tokens} in / {usage.output_tokens} out tokens"
+        + (f", ~${cost}" if cost is not None else ""),
+        fg=typer.colors.GREEN,
+    )
 
 
 if __name__ == "__main__":

@@ -135,6 +135,16 @@ def normalized_hash(func: ast.AST) -> str:
 # ---------------------------------------------------------------- extraction
 
 
+def is_overload(func: ast.AST) -> bool:
+    """True for @overload / @typing.overload stubs: type-checker hints that never run."""
+    for dec in func.decorator_list:
+        if (isinstance(dec, ast.Name) and dec.id == "overload") or (
+            isinstance(dec, ast.Attribute) and dec.attr == "overload"
+        ):
+            return True
+    return False
+
+
 def extract_units(tree: ast.Module) -> list[UnitInfo]:
     units: list[UnitInfo] = []
 
@@ -159,6 +169,8 @@ def extract_units(tree: ast.Module) -> list[UnitInfo]:
                 visit(child, qual, in_class=True)
 
             elif isinstance(child, FUNC_NODES):
+                if is_overload(child):
+                    continue  # only the real implementation counts
                 qual = [*scope, child.name]
                 end = child.end_lineno or child.lineno
                 params = _params(child, is_method=in_class)

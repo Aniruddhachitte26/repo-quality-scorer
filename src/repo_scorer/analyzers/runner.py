@@ -8,7 +8,13 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from repo_scorer.analyzers import architecture, dependencies, documentation, testing
+from repo_scorer.analyzers import (
+    architecture,
+    dependencies,
+    documentation,
+    duplication,
+    testing,
+)
 from repo_scorer.analyzers.base import MetricResult, save_metrics
 from repo_scorer.db.models import Repo
 from repo_scorer.db.session import SessionLocal
@@ -20,6 +26,7 @@ ANALYZERS: dict[str, AnalyzerFn] = {
     architecture.NAME: architecture.run,
     dependencies.NAME: dependencies.run,
     testing.NAME: testing.run,
+    duplication.NAME: duplication.run,
 }
 
 

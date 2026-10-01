@@ -8,6 +8,7 @@ metrics     one row per computed metric (filled by the analyzers)
 
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     JSON,
     DateTime,
@@ -19,6 +20,8 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+EMBEDDING_DIM = 768  # jina-embeddings-v2-base-code
 
 
 class Base(DeclarativeBase):
@@ -86,9 +89,29 @@ class CodeUnit(Base):
     has_docstring: Mapped[bool] = mapped_column(default=False)
     has_type_hints: Mapped[bool] = mapped_column(default=False)
     normalized_hash: Mapped[str | None] = mapped_column(String(64))  # for clone detection
-    # embedding column (pgvector) is added later, with the duplication analyzer
 
     file: Mapped[SourceFile] = relationship(back_populates="code_units")
+
+
+class EmbeddingCache(Base):
+    """One vector per distinct piece of code text, so nothing is embedded twice."""
+
+    __tablename__ = "embedding_cache"
+
+    content_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    embedding = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+
+
+class CodeUnitEmbedding(Base):
+    """Vector for each function in a repo, searched with pgvector."""
+
+    __tablename__ = "code_unit_embeddings"
+
+    code_unit_id: Mapped[int] = mapped_column(
+        ForeignKey("code_units.id", ondelete="CASCADE"), primary_key=True
+    )
+    repo_id: Mapped[int] = mapped_column(ForeignKey("repos.id", ondelete="CASCADE"), index=True)
+    embedding = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
 
 
 class Metric(Base):

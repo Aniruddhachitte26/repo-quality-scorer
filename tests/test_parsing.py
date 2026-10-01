@@ -95,6 +95,23 @@ def test_count_loc_ignores_blanks_and_comments():
     assert count_loc("x = 1\n\n# comment\n    # indented comment\ny = 2\n") == 2
 
 
+def test_overload_stubs_are_skipped():
+    src = (
+        "from typing import overload\n"
+        "import typing\n"
+        "class R:\n"
+        "    @overload\n"
+        "    def read(self, n: int) -> bytes: ...\n"
+        "    @typing.overload\n"
+        "    def read(self, n: None) -> str: ...\n"
+        "    def read(self, n):\n"
+        "        return n\n"
+    )
+    methods = [u for u in extract_units(ast.parse(src)) if u.kind == "method"]
+    assert len(methods) == 1
+    assert methods[0].lineno == 8  # the real implementation
+
+
 def test_is_test_path():
     assert is_test_path(Path("tests/test_api.py"))
     assert is_test_path(Path("src/pkg/tests/helpers.py"))

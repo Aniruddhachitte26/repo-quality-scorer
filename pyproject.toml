@@ -15,10 +15,12 @@ dependencies = [
     "psycopg[binary]",
     "anthropic",
     "packaging",
+    "pgvector",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
+embeddings = ["fastembed"]
 
 [project.scripts]
 repo-scorer = "repo_scorer.cli:app"
