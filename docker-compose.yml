@@ -1,0 +1,23 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: repo-scorer-db
+    environment:
+      POSTGRES_USER: scorer
+      POSTGRES_PASSWORD: scorer
+      POSTGRES_DB: scorer
+    ports:
+      # Host port 5433 -> container port 5432.
+      # 5433 avoids clashing with any Postgres already installed on this Mac.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scorer -d scorer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
