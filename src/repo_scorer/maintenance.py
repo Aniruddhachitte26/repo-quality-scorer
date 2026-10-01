@@ -8,7 +8,7 @@ Caveat: pushed_at is GitHub's last push to any branch, so a bot or a single
 README fix counts as activity. Treat it as a signal, not a verdict.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 ACTIVE_DAYS = 365
 SLOWING_DAYS = 730
@@ -29,7 +29,7 @@ def maintenance_status(
         return "archived"
     if pushed_at is None:
         return "unknown"
-    age_days = ((now or datetime.now(timezone.utc)) - pushed_at).days
+    age_days = ((now or datetime.now(UTC)) - pushed_at).days
     if age_days <= ACTIVE_DAYS:
         return "active"
     if age_days <= SLOWING_DAYS:

@@ -94,7 +94,7 @@ def run_one(
             log("recommend")
             _, _, usage, model = generate_report(repo.id)
             result.cost = usage.cost(model)
-    except Exception as exc:  # keep the batch going; report the failure at the end
+    except Exception as exc:  # noqa: BLE001 - one failed repo must not stop the batch
         result.status = "failed"
         result.error = f"{type(exc).__name__}: {exc}"
     finally:

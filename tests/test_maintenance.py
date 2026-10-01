@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from repo_scorer.maintenance import LABELS, maintenance_status
 
-NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 1, tzinfo=UTC)
 
 
 def _ago(days: int) -> datetime:

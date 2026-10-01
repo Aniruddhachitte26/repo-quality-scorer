@@ -33,7 +33,9 @@ def test_weights_sum_to_one():
 
 
 def _perfect_metrics():
-    v = lambda x: (x, None)  # noqa: E731
+    def v(x):
+        return (x, None)
+
     return {
         ("tests", "reachable_from_tests_pct"): v(95), ("tests", "test_to_source_ratio"): v(1.5),
         ("tests", "asserts_per_test"): v(3), ("tests", "has_ci"): v(1),

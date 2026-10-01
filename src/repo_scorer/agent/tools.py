@@ -100,7 +100,7 @@ class RepoTools:
             return f"Error: unknown tool {name!r}"
         try:
             return truncate(handler(**args))
-        except Exception as exc:  # report errors to the model instead of crashing
+        except Exception as exc:  # noqa: BLE001 - errors go back to the model, never crash the run
             return f"Error: {type(exc).__name__}: {exc}"
 
     # ------------------------------------------------------------ tools

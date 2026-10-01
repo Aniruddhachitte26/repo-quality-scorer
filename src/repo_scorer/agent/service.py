@@ -1,6 +1,6 @@
 """Generate and save a remediation report for one repo."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from repo_scorer.agent.runner import build_brief, run_agent
@@ -40,7 +40,7 @@ def generate_report(repo_id: int, on_tool_call=None) -> tuple[Path, str, object,
             raise RuntimeError(f"Claude API error: {exc}") from exc
 
         cost = usage.cost(settings.anthropic_model)
-        generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
         header = (
             f"# Remediation report: {name}\n\n"
             f"Score **{result['overall']} / 100 (grade {result['grade']})** | "

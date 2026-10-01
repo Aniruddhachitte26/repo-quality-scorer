@@ -121,7 +121,8 @@ def _semantic(session: Session, repo: Repo, units: list) -> dict[str, MetricResu
     missing = {h: t for h, t in unit_text.values() if h not in vectors}
     if missing:
         model = _load_model()
-        for h, vec in zip(missing, model.embed(list(missing.values()), batch_size=16)):
+        embeddings = model.embed(list(missing.values()), batch_size=16)
+        for h, vec in zip(missing, embeddings, strict=True):
             vectors[h] = vec
             session.add(EmbeddingCache(content_hash=h, embedding=vec))
 

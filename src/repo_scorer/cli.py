@@ -18,10 +18,10 @@ def db_check():
 
     try:
         pg_version, vector_version = check_connection()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - any connection failure gets the same advice
         typer.secho(f"Database connection failed: {exc}", fg=typer.colors.RED)
         typer.echo("Is Docker running? Try: docker compose up -d")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.secho(f"Connected to Postgres {pg_version}", fg=typer.colors.GREEN)
     if vector_version:
@@ -53,7 +53,7 @@ def ingest(
         repo = ingest_repo(repo_url, force=force)
     except (ValueError, RuntimeError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.secho(f"Ingested {repo.owner}/{repo.name} (id={repo.id})", fg=typer.colors.GREEN)
     typer.echo(f"  stars={repo.stars}  forks={repo.forks}  license={repo.license}")
@@ -120,7 +120,7 @@ def analyze(
         results = run_analyzers(repo.id, only=only)
     except (ValueError, RuntimeError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.secho(f"Analyzed {repo.owner}/{repo.name}", fg=typer.colors.GREEN)
     for analyzer, metrics in results.items():
@@ -181,7 +181,7 @@ def score(repo_url: str):
         result = score_repo(repo.id)
     except ValueError as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.secho(
         f"\n{repo.owner}/{repo.name}: {result['overall']} / 100  (grade {result['grade']})",
@@ -231,7 +231,7 @@ def recommend(repo_url: str):
         path, report, usage, model = generate_report(repo.id, on_tool_call=show_call)
     except (ValueError, RuntimeError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     typer.echo("\n" + report)
     cost = usage.cost(model)
@@ -329,7 +329,7 @@ def dashboard():
     except ImportError:
         typer.secho('Streamlit not installed. Run: pip install -e ".[dashboard]"',
                     fg=typer.colors.RED)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     app_path = Path(__file__).parent / "dashboard" / "app.py"
     subprocess.run([sys.executable, "-m", "streamlit", "run", str(app_path)], check=False)
@@ -358,7 +358,7 @@ def reanalyze():
             run_analyzers(repo_id)
             scored = score_repo(repo_id)
             results.append((scored["overall"], scored["grade"], f"{owner}/{name}"))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one failed repo must not stop the rest
             typer.secho(f"    FAILED: {type(exc).__name__}: {exc}", fg=typer.colors.RED)
 
     typer.secho("\nLeaderboard", bold=True)

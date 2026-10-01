@@ -16,7 +16,7 @@ import ast
 import configparser
 import tomllib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -221,7 +221,7 @@ def _pct(part: int, total: int) -> float:
 
 def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
     reqs, source = collect_dependencies(Path(repo.local_path))
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     rows: list[dict] = []
 
     try:
@@ -253,7 +253,7 @@ def run(session: Session, repo: Repo) -> dict[str, MetricResult]:
 
             checkable = [r for r in rows if r.get("newest_allowed")]
             vulns = query_osv(client, [(r["name"], r["newest_allowed"]) for r in checkable])
-            for row, ids in zip(checkable, vulns):
+            for row, ids in zip(checkable, vulns, strict=True):
                 row["vulns"] = ids
     except httpx.HTTPError as exc:
         raise RuntimeError(f"Dependency check failed (network): {exc}") from exc
