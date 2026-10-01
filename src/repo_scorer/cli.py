@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import typer
 
 app = typer.Typer(help="Score the quality of Python repositories.")
@@ -231,6 +233,55 @@ def recommend(repo_url: str):
         f"{usage.input_tokens + usage.cache_read_tokens} in / {usage.output_tokens} out tokens"
         + (f", ~${cost}" if cost is not None else ""),
         fg=typer.colors.GREEN,
+    )
+
+
+@app.command()
+def batch(
+    repo_list: Path = typer.Argument(..., exists=True, help="Text file: one GitHub URL per line."),
+    recommend: bool = typer.Option(
+        False, "--recommend/--no-recommend",
+        help="Also run the Claude agent (costs API credits). Off by default.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Re-run repos that are already scored."),
+):
+    """Run the whole pipeline for every repo in a list. Free unless --recommend is given."""
+    from repo_scorer.pipeline import read_repo_list, run_one
+
+    urls = read_repo_list(repo_list.read_text())
+    mode = "WITH Claude reports (uses credits)" if recommend else "scores only (free)"
+    typer.secho(f"Batch: {len(urls)} repos, {mode}\n", bold=True)
+
+    results = []
+    for i, url in enumerate(urls, 1):
+        typer.echo(f"[{i}/{len(urls)}] {url}")
+        res = run_one(url, recommend=recommend, force=force,
+                      log=lambda step: typer.echo(f"    {step}..."))
+        results.append(res)
+        if res.status == "failed":
+            typer.secho(f"    FAILED: {res.error}", fg=typer.colors.RED)
+        else:
+            label = "skipped (already scored)" if res.status == "skipped" else f"{res.seconds}s"
+            cost = f", ${res.cost}" if res.cost else ""
+            typer.secho(f"    {res.overall} ({res.grade})  {label}{cost}", fg=typer.colors.GREEN)
+
+    done = sorted((r for r in results if r.overall is not None),
+                  key=lambda r: r.overall, reverse=True)
+    typer.secho("\nLeaderboard", bold=True)
+    for rank, r in enumerate(done, 1):
+        typer.echo(f"  {rank:>2}. {r.overall:>5}  {r.grade}  {r.name}")
+
+    failed = [r for r in results if r.status == "failed"]
+    if failed:
+        typer.secho(f"\n{len(failed)} failed:", fg=typer.colors.RED)
+        for r in failed:
+            typer.echo(f"  {r.url}: {r.error}")
+
+    total_cost = sum(r.cost or 0 for r in results)
+    typer.secho(
+        f"\nDone: {len(done)} scored, {len(failed)} failed"
+        + (f", total Claude cost ${total_cost:.4f}" if recommend else ""),
+        bold=True,
     )
 
 

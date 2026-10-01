@@ -1,0 +1,3 @@
+https://github.com/psf/requests
+https://github.com/pallets/click
+https://github.com/kennethreitz/maya

@@ -16,6 +16,7 @@ Metrics:
 
 import hashlib
 from collections import defaultdict
+from functools import lru_cache
 from pathlib import Path
 
 from sqlalchemy import delete, select, text
@@ -72,6 +73,14 @@ def _loc_str(u) -> str:
 # ---------------------------------------------------------------- semantic
 
 
+@lru_cache(maxsize=1)
+def _load_model():
+    """Load the embedding model once per process (it's ~600 MB), reused across repos."""
+    from fastembed import TextEmbedding
+
+    return TextEmbedding(EMBEDDING_MODEL)
+
+
 _PAIRS_SQL = text("""
     SELECT a.code_unit_id AS a_id,
            b.code_unit_id AS b_id,
@@ -87,7 +96,7 @@ _PAIRS_SQL = text("""
 
 def _semantic(session: Session, repo: Repo, units: list) -> dict[str, MetricResult]:
     try:
-        from fastembed import TextEmbedding
+        import fastembed  # noqa: F401
     except ImportError:
         return {"semantic_duplicate_pairs": MetricResult(
             0.0, {"status": "skipped: install with  pip install -e '.[embeddings]'"}
@@ -111,7 +120,7 @@ def _semantic(session: Session, repo: Repo, units: list) -> dict[str, MetricResu
     ).all())
     missing = {h: t for h, t in unit_text.values() if h not in vectors}
     if missing:
-        model = TextEmbedding(EMBEDDING_MODEL)
+        model = _load_model()
         for h, vec in zip(missing, model.embed(list(missing.values()), batch_size=16)):
             vectors[h] = vec
             session.add(EmbeddingCache(content_hash=h, embedding=vec))

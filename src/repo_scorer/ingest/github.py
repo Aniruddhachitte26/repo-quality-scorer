@@ -57,6 +57,7 @@ def fetch_metadata(ref: RepoRef) -> RepoMetadata:
         f"https://api.github.com/repos/{ref.owner}/{ref.name}",
         headers=headers,
         timeout=20,
+        follow_redirects=True,  # renamed/transferred repos answer with 301
     )
     if resp.status_code == 404:
         raise ValueError(f"Repository not found (or private): {ref.url}")

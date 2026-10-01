@@ -1,0 +1,41 @@
+# Repositories for the batch run.  Usage:  repo-scorer batch repos.txt
+# One GitHub URL per line; '#' starts a comment.
+#
+# Three groups on purpose: if the scorer is fair, group A should mostly rank above group C.
+# Some repos may have been renamed, archived or deleted: the batch reports those and moves on.
+
+# --- Group A: widely used, actively maintained -----------------------------
+https://github.com/psf/requests
+https://github.com/pallets/flask
+https://github.com/pallets/click
+https://github.com/encode/httpx
+https://github.com/Textualize/rich
+https://github.com/fastapi/typer
+https://github.com/python-attrs/attrs
+https://github.com/pytest-dev/pluggy
+https://github.com/hynek/structlog
+https://github.com/encode/starlette
+
+# --- Group B: established, mid-sized --------------------------------------
+https://github.com/tqdm/tqdm
+https://github.com/arrow-py/arrow
+https://github.com/dateutil/dateutil
+https://github.com/marshmallow-code/marshmallow
+https://github.com/jpadilla/pyjwt
+https://github.com/python-humanize/humanize
+https://github.com/mahmoud/boltons
+https://github.com/sloria/environs
+https://github.com/pyeve/cerberus
+https://github.com/gruns/furl
+
+# --- Group C: small, older or no longer maintained ------------------------
+https://github.com/kennethreitz/records
+https://github.com/kennethreitz/maya
+https://github.com/kennethreitz/delegator.py
+https://github.com/kennethreitz/clint
+https://github.com/kennethreitz/envoy
+https://github.com/seatgeek/fuzzywuzzy
+https://github.com/gruns/icecream
+https://github.com/kennethreitz/crayons
+https://github.com/kennethreitz/background
+https://github.com/kennethreitz/pip-pop
