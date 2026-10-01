@@ -115,7 +115,7 @@ def analyze(
 
     try:
         results = run_analyzers(repo.id, only=only)
-    except ValueError as exc:
+    except (ValueError, RuntimeError) as exc:
         typer.secho(str(exc), fg=typer.colors.RED)
         raise typer.Exit(code=1)
 
