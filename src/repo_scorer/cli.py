@@ -100,6 +100,69 @@ def parse(repo_url: str):
 
 
 @app.command()
+def analyze(
+    repo_url: str,
+    only: list[str] = typer.Option(None, "--only", help="Run just these analyzers."),
+):
+    """Run analyzers on a parsed repo and store the metrics."""
+    from repo_scorer.analyzers.runner import run_analyzers
+    from repo_scorer.ingest.service import get_repo_by_url
+
+    repo = get_repo_by_url(repo_url)
+    if repo is None:
+        typer.secho("Repo not ingested yet. Run: repo-scorer ingest <url>", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    try:
+        results = run_analyzers(repo.id, only=only)
+    except ValueError as exc:
+        typer.secho(str(exc), fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    typer.secho(f"Analyzed {repo.owner}/{repo.name}", fg=typer.colors.GREEN)
+    for analyzer, metrics in results.items():
+        typer.echo(f"\n  [{analyzer}]")
+        for name, m in metrics.items():
+            typer.echo(f"    {name:<22} {m.value:>6}")
+
+
+@app.command()
+def details(
+    repo_url: str,
+    analyzer: str = typer.Argument(..., help="e.g. documentation, architecture"),
+    metric: str = typer.Argument(None, help="Optional: just one metric."),
+):
+    """Show the stored details behind an analyzer's metrics."""
+    import json
+
+    from sqlalchemy import select
+
+    from repo_scorer.db.models import Metric
+    from repo_scorer.db.session import SessionLocal
+    from repo_scorer.ingest.service import get_repo_by_url
+
+    repo = get_repo_by_url(repo_url)
+    if repo is None:
+        typer.secho("Repo not ingested yet.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
+
+    query = select(Metric).where(Metric.repo_id == repo.id, Metric.analyzer == analyzer)
+    if metric:
+        query = query.where(Metric.name == metric)
+    with SessionLocal() as session:
+        rows = session.scalars(query.order_by(Metric.name)).all()
+
+    if not rows:
+        typer.secho("No metrics found. Run `analyze` first.", fg=typer.colors.YELLOW)
+        raise typer.Exit(code=1)
+
+    for m in rows:
+        typer.secho(f"\n{m.name} = {m.value}", fg=typer.colors.CYAN, bold=True)
+        if m.details:
+            typer.echo(json.dumps(m.details, indent=2, default=str))
+
+
+@app.command()
 def score(repo_url: str):
     """Score a repository (not implemented yet)."""
     typer.echo(f"Would score: {repo_url}")
